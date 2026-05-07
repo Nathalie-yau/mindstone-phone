@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>正念石</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #000; overflow: hidden;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif; cursor: none;
+    }
+
+    /* ── 左上：传感器状态 ── */
+    #sensor-status {
+      position: fixed; top: 48px; left: 48px; z-index: 20;
+      display: flex; align-items: center; gap: 9px;
+      opacity: 0.55; transition: opacity 0.5s;
+    }
+    #sensor-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25);
+      transition: all 0.5s;
+    }
+    #sensor-dot.connected {
+      background: #4ade80; box-shadow: 0 0 8px #4ade80; border-color: #4ade80;
+    }
+    #sensor-label {
+      font-size: 10px; letter-spacing: 2px; color: rgba(255,255,255,0.45);
+    }
+
+    /* ── 左上：心率数据面板（仅连接传感器时显示） ── */
+    #data-panel {
+      position: fixed; top: 50px; left: 50px; z-index: 20;
+      display: none; text-align: left;
+    }
+    .hr-label { font-size: 10px; letter-spacing: 2px; color: rgba(255,255,255,0.28); margin-bottom: 4px; }
+    .hr-value { font-size: 20px; margin-bottom: 22px; color: #4ade80; font-weight: 300; }
+
+    /* ── 连接按钮 ── */
+#connect-btn { display: none !important; }
+    #stone-icon  { display: none; width: 28px; height: 28px; fill: none; stroke: rgba(74,222,128,0.55); stroke-width: 1.5; }
+    #status-dot  { display: none; width: 7px; height: 7px; background: #4ade80; border-radius: 50%; box-shadow: 0 0 12px #4ade80; position: absolute; }
+
+    /* ── 核心文字层 ── */
+    #ui-overlay {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: none; text-align: center;
+      transition: opacity 1.5s ease;
+    }
+    .main-text {
+      font-size: 26px; font-weight: 300; letter-spacing: 6px; line-height: 1.75;
+      color: rgba(255,255,255,0.92);
+      max-width: 78%; text-align: center;
+      text-shadow: 0 0 40px rgba(74,222,128,0.5);
+      transition: opacity 1.2s ease;
+    }
+    .sub-text {
+      font-size: 10px; letter-spacing: 2.5px; margin-top: 12px;
+      color: rgba(255,255,255,0.22); text-transform: uppercase;
+      text-align: center;
+      transition: opacity 1.2s ease;
+    }
+
+    /* ── state1 脉冲环（替代进度条）── */
+    #pulse-ring {
+      display: none; margin-top: 56px;
+      width: 48px; height: 48px; position: relative;
+    }
+    #pulse-ring svg { width: 100%; height: 100%; }
+    #pulse-ring .track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 1.5; }
+    #pulse-ring .fill  {
+      fill: none; stroke: #4ade80; stroke-width: 1.5;
+      stroke-linecap: round;
+      transform: rotate(-90deg); transform-origin: 50% 50%;
+      transition: stroke-dashoffset 0.3s linear;
+      filter: drop-shadow(0 0 4px #4ade80);
+    }
+
+    /* ── 传感器未连接弹窗 ── */
+    #no-sensor-modal {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.78); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center;
+    }
+    #no-sensor-modal.visible { display: flex; }
+    .modal-box {
+      border: 1px solid rgba(74,222,128,0.22); border-radius: 18px;
+      padding: 50px 54px; max-width: 440px; width: 90%; text-align: center;
+      background: rgba(255,255,255,0.02);
+    }
+    .modal-box h2 {
+      font-size: 16px; font-weight: 300; letter-spacing: 5px;
+      color: rgba(255,255,255,0.78); margin: 0 0 14px;
+    }
+    .modal-box p {
+      font-size: 13px; line-height: 2; letter-spacing: 1px;
+      color: rgba(255,255,255,0.38); margin: 0 0 38px;
+    }
+    .modal-box p b { color: rgba(255,255,255,0.65); font-weight: 400; }
+    .modal-btns { display: flex; gap: 12px; justify-content: center; }
+    .modal-btn {
+      padding: 11px 26px; border-radius: 50px; font-size: 11px; letter-spacing: 2px;
+      cursor: pointer; transition: all 0.3s; font-family: inherit;
+    }
+    .btn-primary {
+      background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.45);
+      color: #86efac;
+    }
+    .btn-primary:hover { background: rgba(74,222,128,0.28); }
+    .btn-ghost {
+      background: transparent; border: 1px solid rgba(255,255,255,0.14);
+      color: rgba(255,255,255,0.38);
+    }
+    .btn-ghost:hover { color: rgba(255,255,255,0.62); border-color: rgba(255,255,255,0.3); }
+
+    /* ── 结算层（从黑暗中淡入） ── */
+    #result-layer {
+      position: fixed; inset: 0; z-index: 150;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 2.5s ease;
+    }
+    #result-layer.visible { opacity: 1; pointer-events: auto; }
+
+    .result-inner { text-align: center; }
+
+    /* 平静度大数字 */
+    .calm-num {
+      font-size: 88px; font-weight: 100; letter-spacing: -3px;
+      color: rgba(74,222,128,0.88); line-height: 1;
+      animation: numFloat 4s ease-in-out infinite alternate;
+    }
+    @keyframes numFloat {
+      from { text-shadow: 0 0 60px rgba(74,222,128,0.3); }
+      to   { text-shadow: 0 0 100px rgba(74,222,128,0.6), 0 0 200px rgba(74,222,128,0.15); }
+    }
+    .calm-unit {
+      font-size: 13px; letter-spacing: 5px; color: rgba(255,255,255,0.3);
+      margin-top: 2px; margin-bottom: 36px;
+    }
+
+    /* 贴纸引导（延迟淡入）*/
+    .reward-section {
+      opacity: 0; transform: translateY(12px);
+      transition: opacity 1.5s ease 1.8s, transform 1.5s ease 1.8s;
+    }
+    #result-layer.visible .reward-section {
+      opacity: 1; transform: translateY(0);
+    }
+    .reward-divider {
+      width: 36px; height: 1px; background: rgba(74,222,128,0.25);
+      margin: 0 auto 28px;
+    }
+    .reward-text {
+      font-size: 14px; letter-spacing: 3.5px; line-height: 2.2;
+      color: rgba(255,255,255,0.55);
+    }
+    .reward-text b { color: rgba(255,255,255,0.8); font-weight: 400; }
+
+    /* 二维码占位 */
+    .qr-wrap {
+      margin: 28px auto 14px;
+      width: 88px; height: 88px;
+      border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .qr-wrap svg { width: 56px; height: 56px; opacity: 0.3; }
+    .qr-hint { font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.2); margin-bottom: 26px; }
+    .sticker-tag {
+      display: inline-block; padding: 8px 24px; border-radius: 50px;
+      border: 1px solid rgba(74,222,128,0.25);
+      font-size: 11px; letter-spacing: 3px; color: rgba(74,222,128,0.65);
+    }
+
+    /* ── 心率显示（左上，连接后显示，替换data-panel）── */
+    #hr-display {
+      position: fixed; top: 82px; left: 48px; z-index: 20;
+      display: none; flex-direction: column; gap: 6px;
+    }
+    #hr-display.visible { display: flex; }
+    .hr-row { display: flex; align-items: baseline; gap: 6px; }
+    .hr-lbl  { font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.28); width: 40px; }
+    .hr-num  { font-size: 18px; font-weight: 300; color: #4ade80; font-variant-numeric: tabular-nums; }
+    .hr-unit { font-size: 9px; color: rgba(255,255,255,0.2); }
+
+    /* ── 封面底部：连接按钮 + 演示按钮 ── */
+    #cover-btns { display: none !important; }
+    #cover-btns.hidden { display: none; }
+    #cover-connect-btn {
+      padding: 12px 38px; border-radius: 50px;
+      background: rgba(74,222,128,0.07);
+      border: 1px solid rgba(74,222,128,0.32);
+      color: rgba(255,255,255,0.7);
+      font-size: 11px; letter-spacing: 3px;
+      cursor: pointer; font-family: inherit;
+      transition: all 0.4s;
+    }
+    #cover-connect-btn:hover {
+      background: rgba(74,222,128,0.14);
+      border-color: rgba(74,222,128,0.55);
+      color: #fff;
+    }
+    #cover-connect-btn.connecting {
+      pointer-events: none; color: rgba(74,222,128,0.45);
+      border-color: rgba(74,222,128,0.2);
+    }
+    #cover-demo-btn {
+      background: transparent; border: none;
+      color: rgba(255,255,255,0.2); font-size: 10px;
+      letter-spacing: 2px; cursor: pointer; font-family: inherit;
+      transition: color 0.3s;
+    }
+    #cover-demo-btn:hover { color: rgba(255,255,255,0.4); }
+
+    /* 连接成功后的握持提示（底部） */
+    #ready-hint {
+      position: fixed; bottom: 36px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px; letter-spacing: 3px;
+      color: rgba(74,222,128,0.5);
+      opacity: 0; transition: opacity 1.2s ease;
+      z-index: 20; white-space: nowrap; pointer-events: none;
+    }
+    #ready-hint.visible { opacity: 1; }
+
+    
+    /* ══ 手机端适配 ══ */
+    @media (max-width: 600px) {
+      .main-text {
+        font-size: clamp(20px, 6.5vw, 30px) !important;
+        letter-spacing: 4px !important;
+        line-height: 1.7 !important;
+        max-width: 88% !important;
+        padding: 0 16px !important;
+      }
+      .sub-text {
+        font-size: clamp(8px, 2.5vw, 11px) !important;
+        letter-spacing: 2px !important;
+      }
+      #hr-display {
+        top: 24px !important;
+        left: 20px !important;
+      }
+      .hr-num { font-size: 16px !important; }
+      #pulse-ring {
+        width: 52px !important;
+        height: 52px !important;
+      }
+      .modal-box {
+        width: 88vw !important;
+        padding: 28px 20px !important;
+      }
+      .calm-num {
+        font-size: clamp(72px, 22vw, 110px) !important;
+      }
+      .reward-text {
+        font-size: 13px !important;
+      }
+      .sticker-hint {
+        font-size: 11px !important;
+        padding: 0 24px !important;
+      }
+      #restart-btn {
+        padding: 12px 32px !important;
+        font-size: 10px !important;
+      }
+      .qr-wrap svg {
+        width: 52px !important;
+        height: 52px !important;
+      }
+    }
+
+    @keyframes tapPulse { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
+  </style>
+</head>
+<body>
+
+<!-- 传感器状态 -->
+<div id="sensor-status">
+  <div id="sensor-dot"></div>
+  <span id="sensor-label">未连接传感器</span>
+</div>
+
+<!-- 心率显示：连接后替代sensor-status，左上角 -->
+<div id="hr-display">
+  <div class="hr-row">
+    <span class="hr-lbl">初始</span>
+    <span class="hr-num" id="hr-init">--</span>
+    <span class="hr-unit">BPM</span>
+  </div>
+  <div class="hr-row">
+    <span class="hr-lbl">当前</span>
+    <span class="hr-num" id="hr-curr">--</span>
+    <span class="hr-unit">BPM</span>
+  </div>
+</div>
+
+<!-- 封面底部：连接按钮组 -->
+<div id="cover-btns">
+  <button id="cover-connect-btn" onclick="connectSensor()">连接感官石</button>
+  <button id="cover-demo-btn"    onclick="_enterDemoMode()">以演示模式体验</button>
+</div>
+
+<!-- 连接成功后握持提示 -->
+<div id="ready-hint">握住手中的物品，感受它的重量</div>
+
+
+<!-- 连接成功后右上角小图标（隐藏state：只在connected后出现）-->
+<button id="connect-btn" style="display:none">
+  <span id="btn-text"></span>
+  <svg id="stone-icon" viewBox="0 0 100 100">
+    <path d="M50,15 C75,15 90,35 90,55 C90,75 70,85 50,85 C30,85 10,75 10,55 C10,35 25,15 50,15 Z"/>
+  </svg>
+  <div id="status-dot"></div>
+</button>
+
+<!-- 主引导文字 -->
+<div id="ui-overlay">
+  <div id="main-text" class="main-text">找一件你熟悉的东西<br>握在手心，感受它的重量</div>
+  <div id="sub-text"  class="sub-text">Hold something familiar · tap anywhere to begin</div>
+<div id="tap-hint" style="position:fixed;bottom:36px;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:3px;color:rgba(255,255,255,0.3);pointer-events:none;white-space:nowrap;z-index:10;animation:tapPulse 2.5s infinite;">轻触屏幕，开始体验</div>
+  <!-- state 1：脉冲环 -->
+  <div id="pulse-ring">
+    <svg viewBox="0 0 48 48">
+      <circle class="track" cx="24" cy="24" r="20"/>
+      <circle class="fill"  cx="24" cy="24" r="20"
+              stroke-dasharray="125.66"
+              stroke-dashoffset="125.66"
+              id="ring-fill"/>
+    </svg>
+  </div>
+</div>
+
+<!-- 弹窗：无传感器 -->
+<div id="no-sensor-modal">
+  <div class="modal-box">
+    <h2>未检测到感官石</h2>
+    <p>
+      当前没有连接心率传感器<br>
+      你可以以 <b>演示模式</b> 体验完整正念流程<br>
+      或先连接感官石再继续
+    </p>
+    <div class="modal-btns">
+      <button class="modal-btn btn-primary" onclick="startDemo()">以演示模式继续</button>
+      <button class="modal-btn btn-ghost"   onclick="closeModal()">返回连接</button>
+    </div>
+  </div>
+</div>
+
+<!-- 结算层 -->
+<div id="result-layer">
+  <div class="result-inner">
+    <div class="calm-num" id="calm-num">--</div>
+    <div class="calm-unit">CALM INDEX</div>
+
+    <div class="reward-section">
+      <div class="reward-divider"></div>
+      <div class="reward-text">
+        你已完成一次正念练习<br>
+        <b>带走桌上的一枚贴纸</b><br>
+        找一个安静的地方，随时扫码回到当下
+      </div>
+      <!-- 替换为你的真实二维码图片 -->
+      <div class="qr-wrap">
+        <svg viewBox="0 0 40 40" fill="white" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2"  y="2"  width="14" height="14" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
+          <rect x="5"  y="5"  width="8"  height="8"  rx="0.5"/>
+          <rect x="24" y="2"  width="14" height="14" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
+          <rect x="27" y="5"  width="8"  height="8"  rx="0.5"/>
+          <rect x="2"  y="24" width="14" height="14" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
+          <rect x="5"  y="27" width="8"  height="8"  rx="0.5"/>
+          <rect x="24" y="24" width="3"  height="3"/>
+          <rect x="29" y="24" width="3"  height="3"/>
+          <rect x="34" y="24" width="3"  height="3"/>
+          <rect x="24" y="29" width="3"  height="3"/>
+          <rect x="29" y="32" width="3"  height="3"/>
+          <rect x="34" y="29" width="3"  height="3"/>
+          <rect x="34" y="34" width="3"  height="3"/>
+        </svg>
+      </div>
+      <div class="qr-hint">扫码随时体验正念石</div>
+      <div class="sticker-tag">✦ &nbsp;取走你的正念贴纸 &nbsp;✦</div>
+      <button id="restart-btn" onclick="resetSystem()" style="
+        margin-top: 36px;
+        padding: 14px 40px;
+        background: transparent;
+        border: 1px solid rgba(255,255,255,0.3);
+        border-radius: 50px;
+        color: rgba(255,255,255,0.6);
+        font-size: 11px;
+        letter-spacing: 3px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.4s;
+      "
+      onmouseover="this.style.borderColor='rgba(255,255,255,0.7)';this.style.color='rgba(255,255,255,0.9)'"
+      onmouseout="this.style.borderColor='rgba(255,255,255,0.3)';this.style.color='rgba(255,255,255,0.6)'">
+        再来一次
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Web Serial ── */
+p5.prototype.createSerial = function() { const s = new WebSerial(); this._elements.push(s); return s; };
+class WebSerial {
+  constructor() { this.port = null; this.reader = null; this.serialData = []; }
+  async open(baud=9600) { this.port = await navigator.serial.requestPort(); await this.port.open({baudRate:baud}); this.readLoop(); }
+  async readLoop() {
+    while (this.port.readable) {
+      this.reader = this.port.readable.getReader();
+      try {
+        while(true){
+          const{value,done}=await this.reader.read();
+          if(done) break;
+          if(value){
+            for(let i=0;i<value.length;i++) this.serialData.push(value[i]);
+            // 超限时直接截断头部，比 splice 快
+            if(this.serialData.length > 1200){
+              this.serialData = this.serialData.slice(600);
+            }
+          }
+        }
+      } finally { this.reader.releaseLock(); }
+    }
+  }
+  available() { return this.serialData.length; }
+  readStringUntil(ch) {
+    const i=this.serialData.indexOf(ch.charCodeAt(0));
+    if(i!==-1){const s=this.serialData.splice(0,i+1);return String.fromCharCode(...s);}
+    return null;
+  }
+  opened() { return this.port && this.port.readable; }
+}
+
+/* ── 状态与变量 ── */
+let state=0, timer=0, filaments=[];
+const NUM_FILAMENTS=200;
+let serial, rawVal=512, smoothedSensor=0, isSimulating=true;
+let initialHR=0, displayHR=0, hrHistory=[], valSum=0, valSampleCount=0;
+const MAX_HIST=150;
+
+// 闭眼收尾阶段
+let closeEyeActive=false, closeEyeStart=0;
+const CLOSE_EYE_MS = 20000; // 20秒
+
+// 结算
+let resultShown=false;
+
+/* ── 身体扫描文案 ── */
+const scanPhrases=[
+  {zh:"感受身体被椅子稳稳托住",             en:"Feel the steady support beneath you"},
+  {zh:"觉察掌心石头的微温<br>那是你自己的温度", en:"Notice the warmth—it comes from you"},
+  {zh:"感受四肢沉稳的重量<br>你不需要做任何事",  en:"Feel the grounding weight of your limbs"},
+  {zh:"放下双肩<br>让紧张随呼吸慢慢流走",      en:"Drop your shoulders, let tension dissolve"},
+  {zh:"此时此地<br>你是安全的",               en:"Here, right now, you are safe"},
+  {zh:"念头游走也没关系<br>轻轻地，带它回来",   en:"It's okay to wander. Just gently return"},
+  {zh:"只是呼吸<br>只是此刻",                en:"Just breathe. Just this moment"},
+  {zh:"在这一刻<br>你已抵达当下",             en:"You have arrived"},
+];
+
+/* ── 弹窗 ── */
+function showNoSensorModal(){ document.getElementById('no-sensor-modal').classList.add('visible'); }
+function closeModal()       { document.getElementById('no-sensor-modal').classList.remove('visible'); }
+function startDemo(){
+  closeModal(); isSimulating=true;
+  _enterDemoMode();
+}
+
+/* ── 结算显示 ── */
+function showResult(idx){
+  if(resultShown) return; resultShown=true;
+  document.getElementById('calm-num').textContent = idx+'%';
+  // 先隐藏主文字
+  document.getElementById('ui-overlay').style.opacity='0';
+  // 延迟一拍再淡入结算层（配合星云消隐）
+  setTimeout(()=>{ document.getElementById('result-layer').classList.add('visible'); }, 800);
+}
+function hideResult(){
+  resultShown=false;
+  document.getElementById('result-layer').classList.remove('visible');
+  document.getElementById('ui-overlay').style.opacity='1';
+}
+
+/* ── p5 setup ── */
+function setup(){
+  createCanvas(windowWidth,windowHeight);
+  colorMode(HSB,360,100,100,100);
+  for(let i=0;i<NUM_FILAMENTS;i++) filaments.push(new Filament());
+  serial=createSerial();
+  frameRate(60); // 限制最高帧率，避免高刷屏过载
+  function startOnTap(e){
+    if(e.target.closest && e.target.closest("button")) return;
+    if(state===0){
+      document.removeEventListener("click", startOnTap);
+      document.removeEventListener("touchend", startOnTap);
+      nextState(1); timer=millis();
+    }
+  }
+  document.addEventListener("click", startOnTap);
+  document.addEventListener("touchend", startOnTap, {passive:true});
+}
+
+/* ── 主循环 ── */
+function draw(){
+  background(0,0,0,10);
+  updateHeartData();
+  drawPulseStars();
+
+  const t=millis(), el=t-timer;
+  const dot=document.getElementById('status-dot');
+  if(dot) dot.style.transform=`scale(${1+smoothedSensor*1.5})`;
+
+  /* ── 闭眼收尾阶段 ── */
+  if(closeEyeActive){
+    const ce=t-closeEyeStart;
+    const prog=Math.min(ce/CLOSE_EYE_MS,1);
+
+    // 星云极缓慢熄灭
+    const bri  = Math.max(0, 28 - prog*28);
+    const exp  = Math.max(0.05, 0.82 - prog*0.75);
+    const turb = 0.008 + (1-prog)*0.01;
+    renderVisuals(exp, turb, bri);
+
+    // 文字分段（共20秒）
+    if(ce < 18000){
+      updateUI("试着闭上眼睛<br>等你真正感受到此刻，再慢慢睁开","Gently close your eyes · open when you're ready");
+    } else {
+      updateUI("","");
+    }
+
+    if(prog>=1){
+      closeEyeActive=false;
+      nextState(5);
+    }
+    return;
+  }
+
+  switch(state){
+
+    case 0: // 封面
+      drawEye(0); renderVisuals(0.5,0.01,20);
+      updateUI("找一件你熟悉的东西<br>握在手心，感受它的重量",
+               "Hold something familiar · tap anywhere to begin");
+      break;
+
+    case 1: { // 心率同步（演示模式逻辑，不依赖传感器）
+      const p1=Math.min(el/8000,1);
+      setRing(p1);
+      updateUI("别急<br>感受你握住它的温度","Hold it gently · let your breath slow down");
+      renderVisuals(0.6+p1*0.2,0.03,30);
+      // 8秒结束时锁定一个假的初始心率显示
+      if(p1>=0.98 && !hrInitLocked){
+        hrInitLocked=true;
+        // 用displayHR（真实）或假值
+        hrInitBPM = (displayHR>=40 && displayHR<=180) ? displayHR : Math.floor(Math.random()*16)+72;
+        initialHR = hrInitBPM;
+        const ei=document.getElementById('hr-init');
+        if(ei) ei.textContent=hrInitBPM;
+        const ec=document.getElementById('hr-curr');
+        if(ec) ec.textContent=hrInitBPM;
+      }
+      if(p1>=1){ nextState(2); setRing(-1); }
+      break;
+    }
+
+    case 2: { // 眼睛睁开
+      updateUI("内在旅程，此刻开启","The journey begins");
+      const p2=Math.min(el/10000,1);
+      drawEye(p2); renderVisuals(1.0,0.05,45);
+      if(p2>=1) nextState(3);
+      break;
+    }
+
+    case 3: { // 呼吸训练 3轮（12s/轮）
+      const ph = (el%12000)/12000;
+      // cos曲线：0→1→0，完全连续无跳变
+      const w = (1 - Math.cos(ph*TWO_PI))/2;
+
+      // 星云变化极小，只有轻微起伏感，不干扰呼吸
+      renderVisuals(0.88 + w*0.18 + smoothedSensor*0.8, 0.045, 35 + w*12);
+
+      // 文字淡入淡出，不硬切
+      const fade = 0.1;
+      let alpha = 1;
+      if(ph < fade) alpha = ph/fade;
+      else if(ph > 0.5-fade && ph < 0.5+fade) alpha = abs(ph-0.5)/fade;
+      else if(ph > 1-fade) alpha = (1-ph)/fade;
+      const mt=document.getElementById('main-text');
+      const st=document.getElementById('sub-text');
+      if(mt) mt.style.opacity=alpha;
+      if(st) st.style.opacity=alpha*0.6;
+
+      if(ph<0.5) updateUI("吸气","Inhale");
+      else       updateUI("呼气","Exhale");
+
+      if(el>36000){
+        if(mt) mt.style.opacity=1;
+        if(st) st.style.opacity=1;
+        nextState(4);
+      }
+      break;
+    }
+
+    case 4: { // 身体扫描 90s
+      const DUR=90000;
+      const idx=Math.min(Math.floor(map(el,0,DUR,0,scanPhrases.length)),scanPhrases.length-1);
+      updateUI(scanPhrases[idx].zh, scanPhrases[idx].en);
+      const w4=sin((t%5500)/5500*TWO_PI)*0.5+0.5;
+      renderVisuals(1.0+w4*0.8+smoothedSensor*3.5,0.04,38+w4*25);
+      if(el>DUR){
+        // 进入闭眼收尾
+        closeEyeActive=true; closeEyeStart=t;
+      }
+      break;
+    }
+
+    case 5: { // 结算
+      // 星云继续缓慢消散（已经很暗了）
+      const fade=Math.min(el/4000,1);
+      renderVisuals(Math.max(0.02,0.05-fade*0.05),0.005,Math.max(0,3-fade*3));
+
+      // 10秒后显示结算（平静度画面出现后不再自动重置）
+      if(el>10000 && !resultShown){
+        // 锁定结束心率
+        if(!hrEndLocked && hrEndSamples.length>=3){
+          hrEndLocked=true;
+          hrEndBPM=Math.round(median(hrEndSamples));
+          const ec=document.getElementById('hr-curr');
+          if(ec && hrEndBPM>0) ec.textContent=hrEndBPM;
+        }
+        let ci;
+        if(hrInitBPM>0 && hrEndBPM>0){
+          ci=Math.floor(map(hrInitBPM-hrEndBPM,-5,20,12,46,true));
+        } else {
+          ci=38; // 演示模式默认值
+        }
+        showResult(ci);
+      }
+      // 不自动重置，等用户点按钮
+      break;
+    }
+  }
+}
+
+/* ── 重置 ── */
+function resetSystem(){
+  state=0; timer=millis();
+  valSum=0; valSampleCount=0;
+  closeEyeActive=false;
+  hideResult();
+  // 重置心率
+  hrBuffer=[]; hrInitSamples=[]; hrEndSamples=[];
+  hrInitLocked=false; hrEndLocked=false;
+  hrInitBPM=0; hrEndBPM=0; displayHR=0;
+  const ei=document.getElementById('hr-init');
+  const ec=document.getElementById('hr-curr');
+  if(ei) ei.textContent='--';
+  if(ec) ec.textContent='--';
+  document.getElementById('ui-overlay').style.opacity='1';
+}
+
+/* ── 心率更新 ── */
+// 心率缓冲
+let hrBuffer      = [];
+let hrInitSamples = [];
+let hrEndSamples  = [];
+let hrInitLocked  = false;
+let hrEndLocked   = false;
+let hrInitBPM     = 0;
+let hrEndBPM      = 0;
+
+function median(arr){
+  if(!arr.length) return 0;
+  return [...arr].sort((a,b)=>a-b)[Math.floor(arr.length/2)];
+}
+
+function updateHeartData(){
+  // 视觉始终用模拟数据驱动（稳定不卡）
+  const tgt = state>=4 ? 68 : 86;
+  rawVal = lerp(rawVal, tgt+noise(frameCount*0.04)*10, 0.05);
+  // 心率显示：有初始值后，当前BPM小幅波动（±3 BPM，每30帧更新一次）
+  if(hrInitBPM>0 && frameCount%30===0){
+    const drift = Math.round((noise(frameCount*0.01)-0.5)*6);
+    const curr = Math.max(hrInitBPM-8, Math.min(hrInitBPM+4, hrInitBPM+drift));
+    const ec = document.getElementById('hr-curr');
+    if(ec) ec.textContent = curr;
+  }
+
+  // 如果串口已连接，在后台读数据只更新心率显示数字
+  try {
+    if(serial && serial.opened && serial.opened() && serial.available() > 0){
+      let loopLimit = 20;
+      while(serial.available() > 0 && loopLimit-- > 0){
+        const line = serial.readStringUntil('\n');
+        if(!line) break;
+        const s = line.trim();
+        if(s.startsWith('BPM:')){
+          const v = parseInt(s.slice(4));
+          if(!isNaN(v) && v>=40 && v<=180){
+            displayHR = v;
+            const el = document.getElementById('hr-curr');
+            if(el) el.textContent = v;
+            if(state===1 && !hrInitLocked) hrInitSamples.push(v);
+            if(closeEyeActive && !hrEndLocked) hrEndSamples.push(v);
+          }
+        }
+      }
+    }
+  } catch(e){ /* 串口读取异常不影响视觉 */ }
+
+  // state1结束时锁定初始心率
+  if(state===2 && !hrInitLocked && hrInitSamples.length>=3){
+    hrInitLocked = true;
+    hrInitBPM    = Math.round(median(hrInitSamples));
+    initialHR    = hrInitBPM;
+    const el = document.getElementById('hr-init');
+    if(el) el.textContent = hrInitBPM;
+  }
+
+  smoothedSensor=lerp(smoothedSensor,map(rawVal,400,800,0,1,true),0.15);
+  if(frameCount%4===0){ hrHistory.push(rawVal); if(hrHistory.length>MAX_HIST) hrHistory.shift(); }
+}
+
+/* ── 粒子系统 ── */
+function renderVisuals(exp,turb,briBase){
+  push(); translate(width/2,height/2);
+  for(const f of filaments){ f.update(exp,turb); f.show(briBase); }
+  pop();
+}
+class Filament{
+  constructor(){
+    this.angle=random(TWO_PI);
+    this.radius=pow(random(0.05,1),1.5)*(width*0.58);
+    this.pos=createVector(cos(this.angle)*this.radius,sin(this.angle)*this.radius);
+    this.prev=this.pos.copy(); this.vel=createVector(0,0); this.hue=random(108,148);
+    // 预分配向量，避免每帧 GC
+    this._flow=createVector(0,0);
+    this._tgt=createVector(0,0);
+    this._rot=createVector(0,0);
+  }
+  update(exp,turb){
+    this.prev.set(this.pos);
+    const n=noise(this.pos.x*0.004,this.pos.y*0.004,frameCount*(state===4?0.0008:0.0018));
+    const nx=cos(n*TWO_PI*2.5), ny=sin(n*TWO_PI*2.5);
+    this._flow.set(nx*turb*3.0, ny*turb*3.0);
+    this._tgt.set(cos(this.angle)*this.radius*exp, sin(this.angle)*this.radius*exp);
+    this._rot.set(-this.pos.y, this.pos.x);
+    const rm=this._rot.mag(); if(rm>0){this._rot.x/=rm;this._rot.y/=rm;}
+    this._rot.mult(0.04);
+    const damp=state===4?0.92:0.94;
+    this.vel.x=(this.vel.x+this._flow.x+(this._tgt.x-this.pos.x)*0.055+this._rot.x)*damp;
+    this.vel.y=(this.vel.y+this._flow.y+(this._tgt.y-this.pos.y)*0.055+this._rot.y)*damp;
+    this.pos.add(this.vel);
+  }
+  show(bri){
+    stroke(this.hue,45,bri+smoothedSensor*25+this.vel.mag()*12,map(this.pos.mag(),0,width*0.6,75,0));
+    strokeWeight(2.3); line(this.pos.x,this.pos.y,this.prev.x,this.prev.y);
+  }
+}
+
+function drawPulseStars(){
+  // 하단 점 제거됨
+}
+
+/* ── 脉冲环（state 1）── */
+function setRing(prog){
+  const wrap=document.getElementById('pulse-ring');
+  const fill=document.getElementById('ring-fill');
+  if(prog<0){ wrap.style.display='none'; return; }
+  wrap.style.display='block';
+  const circumference=125.66;
+  fill.style.strokeDashoffset = circumference*(1-prog);
+}
+
+/* ── 眼睛（完整：眼白+虹膜+瞳孔，从缝隙缓慢睁开）── */
+function drawEye(o){
+  if(state>=3||o<=0) return;
+  push(); translate(width/2,height/2);
+
+  const EW  = 220;        // 眼睛半宽
+  const EH  = 90 * o;    // 睁开高度（0→90，从缝到全开）
+  const ease = o * o * (3 - 2*o); // smoothstep，让开合更自然
+
+  // ── 1. 眼白填充（用贝塞尔路径围合）──
+  // 用顶部弧 + 底部弧围成闭合区域
+  if(EH > 1){
+    noStroke();
+    // 眼白：微微泛绿的白
+    fill(130, 8, 96, 28 * ease);
+    beginShape();
+    // 上眼睑内侧
+    vertex(-EW, 0);
+    bezierVertex(-EW*0.5, -EH*1.1, EW*0.5, -EH*1.1, EW, 0);
+    // 下眼睑内侧
+    bezierVertex(EW*0.5, EH*0.85, -EW*0.5, EH*0.85, -EW, 0);
+    endShape(CLOSE);
+  }
+
+  // ── 2. 虹膜（绿色发光圆）──
+  const irisR = 38 * ease;
+  if(irisR > 2 && EH > irisR * 0.6){
+    noStroke();
+    // 外发光晕
+    for(let r=irisR+18; r>irisR; r-=3){
+      fill(130, 60, 88, map(r, irisR, irisR+18, 14, 0) * ease);
+      circle(0, 0, r*2);
+    }
+    // 虹膜本体
+    fill(125, 55, 80, 85 * ease);
+    circle(0, 0, irisR*2);
+    // 虹膜纹理（放射线）
+    stroke(128, 30, 95, 22 * ease);
+    strokeWeight(0.8);
+    for(let a=0; a<TWO_PI; a+=PI/10){
+      line(cos(a)*(irisR*0.5), sin(a)*(irisR*0.5),
+           cos(a)*(irisR*0.9), sin(a)*(irisR*0.9));
+    }
+  }
+
+  // ── 3. 瞳孔 ──
+  const pupilR = 18 * ease;
+  if(pupilR > 1 && EH > pupilR * 0.6){
+    noStroke();
+    fill(0, 0, 4, 92 * ease);
+    circle(0, 0, pupilR*2);
+    // 高光
+    fill(0, 0, 100, 55 * ease);
+    circle(pupilR*0.3, -pupilR*0.3, pupilR*0.55);
+  }
+
+  // ── 4. 上下眼睑轮廓线 ──
+  noFill();
+  stroke(130, 25, 88, 55 * ease);
+  strokeWeight(1.8);
+  // 上眼睑
+  bezier(-EW,0, -EW*0.5,-EH*1.1, EW*0.5,-EH*1.1, EW,0);
+  // 下眼睑（弧度略小）
+  bezier(-EW,0, -EW*0.5,EH*0.85, EW*0.5,EH*0.85, EW,0);
+
+  // ── 5. 睫毛（上眼睑）──
+  if(ease > 0.3){
+    stroke(130, 20, 70, 35 * ease);
+    strokeWeight(1.2);
+    const lashCount = 9;
+    for(let i=0; i<lashCount; i++){
+      const t = map(i, 0, lashCount-1, 0.08, 0.92);
+      // 上眼睑上的点
+      const lx = lerp(-EW, EW, t);
+      const ctrl= -EH*1.1;
+      // 沿贝塞尔切线方向估算
+      const ly = bezierPoint(0, ctrl, ctrl, 0, t);
+      const ang = atan2(ly, lx - (lx<0?-1:1)*20) - HALF_PI;
+      const len = 10 + sin(t*PI)*6;
+      line(lx, ly, lx+cos(ang)*len*ease, ly+sin(ang)*len*ease);
+    }
+  }
+
+  pop();
+}
+
+/* ── UI ── */
+function updateUI(zh,en){
+  const m=document.getElementById('main-text');
+  const s=document.getElementById('sub-text');
+  if(m) m.innerHTML=zh; if(s) s.innerHTML=en;
+}
+function nextState(s){
+  const th=document.getElementById("tap-hint"); if(th) th.style.display="none"; state=s; timer=millis(); }
+
+/* 点击触发（演示模式）*/
+function mousePressed(){
+  if(state!==0 || !isSimulating) return;
+  startDemoFlow();
+}
+
+function startDemoFlow(){
+  nextState(1); timer=millis();
+}
+
+
+
+/* ── 连接传感器 ── */
+async function connectSensor(){
+  const btn = document.getElementById('cover-connect-btn');
+  btn.classList.add('connecting');
+  btn.textContent = '正在连接…';
+  try{
+    const port = await navigator.serial.requestPort();
+    btn.textContent = '建立连接中…';
+    const result = await Promise.race([
+      serial.openWithPort(port,9600).then(()=>'ok'),
+      new Promise(r=>setTimeout(()=>r('timeout'),5000))
+    ]);
+    if(result==='timeout') throw new Error('timeout');
+
+    // 连接成功（保持isSimulating=true让视觉继续跑，串口只更新心率显示）
+    // isSimulating保持true
+    document.getElementById('connect-btn').classList.add('connected');
+    document.getElementById('stone-icon').style.display='block';
+    document.getElementById('status-dot').style.display='block';
+    document.getElementById('sensor-dot').classList.add('connected');
+    document.getElementById('sensor-label').textContent='感官石已连接';
+    document.getElementById('sensor-status').style.opacity='1';
+    document.getElementById('cover-btns').classList.add('hidden');
+
+    // 连接后立刻显示假心率（72-88之间随机），直到真实数据进来替换
+    const fakeHR = Math.floor(Math.random()*17)+72;
+    const ei = document.getElementById('hr-init');
+    const ec = document.getElementById('hr-curr');
+    if(ei) ei.textContent = fakeHR;
+    if(ec) ec.textContent = fakeHR;
+    document.getElementById('hr-display').classList.add('visible');
+
+    // 连接成功，显示握持提示，3秒后直接开始（不等传感器信号）
+    const rh = document.getElementById('ready-hint');
+    rh.textContent = '握住手中的物品，感受它的重量';
+    rh.classList.add('visible');
+    let countdown = 3;
+    const cdTimer = setInterval(()=>{
+      countdown--;
+      if(countdown===2) rh.textContent = '深吸一口气…';
+      else if(countdown===1) rh.textContent = '即将开始…';
+      else {
+        clearInterval(cdTimer);
+        rh.classList.remove('visible');
+        nextState(1); timer=millis();
+      }
+    }, 1000);
+
+  } catch(e){
+    btn.classList.remove('connecting');
+    btn.textContent = '连接感官石';
+    if(e.name==='NotFoundError'){
+      showNoSensorModal();
+    } else {
+      btn.textContent='连接失败，请重试';
+      setTimeout(()=>{ btn.textContent='连接感官石'; showNoSensorModal(); }, 3000);
+    }
+  }
+}
+
+WebSerial.prototype.openWithPort = async function(port,baud){
+  this.port=port;
+  await this.port.open({baudRate:baud});
+  this.readLoop();
+};
+
+function _enterDemoMode(){
+  isSimulating=true;
+  document.getElementById('cover-btns').classList.add('hidden');
+  // 演示模式：hr-display不显示（没有真实数据）
+  // 一次性监听：点击任意位置（排除按钮）进入流程
+  function onTap(e){
+    if(e.target.closest('button')) return;
+    if(state===0 && isSimulating){
+      document.removeEventListener('click', onTap);
+      nextState(1); timer=millis();
+    }
+  }
+  document.addEventListener('click', onTap);
+}
+
+let holdWaitTimer=null, holdSeconds=4;
+function startHoldWait(){
+  holdSeconds=4;
+  let gotSignal=false;
+
+  // 兜底：5秒没收到任何信号，也直接开始（防止Arduino输出格式不对时永远卡住）
+  const fallback=setTimeout(()=>{
+    clearInterval(holdWaitTimer);
+    document.getElementById('ready-hint').classList.remove('visible');
+    document.getElementById('hr-display').classList.add('visible');
+    nextState(1); timer=millis();
+  }, 6000);
+
+  holdWaitTimer=setInterval(()=>{
+    const hint=document.getElementById('ready-hint');
+    // 只要serial有数据进来（serialData有内容 或 hrBuffer有内容）就认为信号正常
+    const hasSignal = serial.available()>0 || hrBuffer.length>0 || displayHR>0;
+    if(hasSignal){
+      if(!gotSignal){ gotSignal=true; }
+      holdSeconds--;
+      if(holdSeconds>0){
+        hint.textContent = holdSeconds===2 ? '深吸一口气…'
+                         : holdSeconds===1 ? '即将开始…'
+                         : '感受到你的心跳了';
+      } else {
+        clearTimeout(fallback);
+        clearInterval(holdWaitTimer);
+        hint.classList.remove('visible');
+        document.getElementById('hr-display').classList.add('visible');
+        setTimeout(()=>{ nextState(1); timer=millis(); }, 400);
+      }
+    } else {
+      hint.textContent='将拇指轻按感官石背面';
+    }
+  }, 1000);
+}
+function windowResized(){ resizeCanvas(windowWidth,windowHeight); }
+</script>
+</body>
+</html>
