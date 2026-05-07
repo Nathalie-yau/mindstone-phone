@@ -13,11 +13,7 @@
     }
 
     /* ── 左上：传感器状态 ── */
-    #sensor-status {
-      position: fixed; top: 48px; left: 48px; z-index: 20;
-      display: flex; align-items: center; gap: 9px;
-      opacity: 0.55; transition: opacity 0.5s;
-    }
+    #sensor-status { display: none !important; }
     #sensor-dot {
       width: 6px; height: 6px; border-radius: 50%;
       background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25);
@@ -51,7 +47,7 @@
       transition: opacity 1.5s ease;
     }
     .main-text {
-      font-size: 26px; font-weight: 300; letter-spacing: 6px; line-height: 1.75;
+      font-size: 22px; font-weight: 300; letter-spacing: 6px; line-height: 1.75;
       color: rgba(255,255,255,0.92);
       max-width: 78%; text-align: center;
       text-shadow: 0 0 40px rgba(74,222,128,0.5);
@@ -129,7 +125,7 @@
 
     /* 平静度大数字 */
     .calm-num {
-      font-size: 88px; font-weight: 100; letter-spacing: -3px;
+      font-size: 76px; font-weight: 100; letter-spacing: -3px;
       color: rgba(74,222,128,0.88); line-height: 1;
       animation: numFloat 4s ease-in-out infinite alternate;
     }
@@ -175,12 +171,8 @@
       font-size: 11px; letter-spacing: 3px; color: rgba(74,222,128,0.65);
     }
 
-    /* ── 心率显示（左上，连接后显示，替换data-panel）── */
-    #hr-display {
-      position: fixed; top: 82px; left: 48px; z-index: 20;
-      display: none; flex-direction: column; gap: 6px;
-    }
-    #hr-display.visible { display: flex; }
+    #hr-display { display: none !important; }
+    #hr-display.visible { display: none !important; }
     .hr-row { display: flex; align-items: baseline; gap: 6px; }
     .hr-lbl  { font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,0.28); width: 40px; }
     .hr-num  { font-size: 18px; font-weight: 300; color: #4ade80; font-variant-numeric: tabular-nums; }
@@ -230,7 +222,7 @@
     /* ══ 手机端适配 ══ */
     @media (max-width: 600px) {
       .main-text {
-        font-size: clamp(20px, 6.5vw, 30px) !important;
+        font-size: clamp(17px, 5.5vw, 24px) !important;
         letter-spacing: 4px !important;
         line-height: 1.7 !important;
         max-width: 88% !important;
@@ -254,7 +246,7 @@
         padding: 28px 20px !important;
       }
       .calm-num {
-        font-size: clamp(72px, 22vw, 110px) !important;
+        font-size: clamp(60px, 18vw, 88px) !important;
       }
       .reward-text {
         font-size: 13px !important;
@@ -271,6 +263,14 @@
         width: 52px !important;
         height: 52px !important;
       }
+    }
+
+
+    .calm-note {
+      margin: 20px auto 24px;
+      font-size: 11px; letter-spacing: 1.5px; line-height: 2;
+      color: rgba(255,255,255,0.22);
+      max-width: 280px;
     }
 
     @keyframes tapPulse { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
@@ -359,29 +359,14 @@
     <div class="reward-section">
       <div class="reward-divider"></div>
       <div class="reward-text">
-        你已完成一次正念练习<br>
-        <b>带走桌上的一枚贴纸</b><br>
-        找一个安静的地方，随时扫码回到当下
+        你已完成一次完整的正念练习<br>
+        <b>如需再次体验</b><br>
+        请扫描贴纸上的二维码
       </div>
-      <!-- 替换为你的真实二维码图片 -->
-      <div class="qr-wrap">
-        <svg viewBox="0 0 40 40" fill="white" xmlns="http://www.w3.org/2000/svg">
-          <rect x="2"  y="2"  width="14" height="14" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
-          <rect x="5"  y="5"  width="8"  height="8"  rx="0.5"/>
-          <rect x="24" y="2"  width="14" height="14" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
-          <rect x="27" y="5"  width="8"  height="8"  rx="0.5"/>
-          <rect x="2"  y="24" width="14" height="14" rx="1" fill="none" stroke="white" stroke-width="1.5"/>
-          <rect x="5"  y="27" width="8"  height="8"  rx="0.5"/>
-          <rect x="24" y="24" width="3"  height="3"/>
-          <rect x="29" y="24" width="3"  height="3"/>
-          <rect x="34" y="24" width="3"  height="3"/>
-          <rect x="24" y="29" width="3"  height="3"/>
-          <rect x="29" y="32" width="3"  height="3"/>
-          <rect x="34" y="29" width="3"  height="3"/>
-          <rect x="34" y="34" width="3"  height="3"/>
-        </svg>
+      <div class="calm-note">
+        完成全流程后，心率通常会有所下降<br>
+        以上数值由算法估算，仅供参考
       </div>
-      <div class="qr-hint">扫码随时体验正念石</div>
       <div class="sticker-tag">✦ &nbsp;取走你的正念贴纸 &nbsp;✦</div>
       <button id="restart-btn" onclick="resetSystem()" style="
         margin-top: 36px;
